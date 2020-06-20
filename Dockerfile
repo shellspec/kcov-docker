@@ -1,19 +1,15 @@
-FROM debian:10-slim AS builder
-WORKDIR /usr/local/src
-RUN export DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes \
- && apt-get update && apt-get install -y \
-      build-essential cmake ninja-build python python3 \
-      binutils-dev libcurl4-openssl-dev zlib1g-dev libdw-dev libiberty-dev
-ARG VERSION=v37
-ADD https://github.com/SimonKagstrom/kcov/archive/$VERSION.tar.gz /
-RUN tar xzf /$VERSION.tar.gz -C ./ --strip-components 1 \
- && echo "Build kcov $VERSION" && mkdir build && cd build \
- && cmake -G 'Ninja' .. && cmake --build . --target install
+FROM alpine:3.12 as builder
+RUN apk add --no-cache build-base cmake ninja python3 \
+      binutils-dev curl-dev elfutils-dev
+WORKDIR /root
+ENV KCOV=https://github.com/SimonKagstrom/kcov/archive/v38.tar.gz
+RUN wget -q $KCOV -O - | tar xz -C ./ --strip-components 1
+RUN mkdir build && cd build \
+ && CXXFLAGS="-D__ptrace_request=int" cmake -G Ninja .. \
+ && cmake --build . --target install
 
-FROM debian:10-slim
-RUN export DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes \
- && apt-get update && apt-get install -y binutils libcurl4 zlib1g libdw1 \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
+FROM alpine:3.12
+RUN apk add --no-cache bash python3 binutils-dev curl-dev elfutils-libelf
 COPY --from=builder /usr/local/bin/kcov* /usr/local/bin/
 COPY --from=builder /usr/local/share/doc/kcov /usr/local/share/doc/kcov
 CMD ["/usr/local/bin/kcov"]
